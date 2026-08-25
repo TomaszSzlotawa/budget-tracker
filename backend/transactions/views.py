@@ -1,8 +1,8 @@
 from django.shortcuts import render
-from rest_framework import viewsets
-
+from rest_framework import viewsets, generics
+from rest_framework.permissions import AllowAny
 from .models import Category, Transaction
-from .serializers import CategorySerializer, TransactionSerializer
+from .serializers import CategorySerializer, TransactionSerializer, RegisterSerializer
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -24,3 +24,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = RegisterSerializer
+    permission_classes = [AllowAny]

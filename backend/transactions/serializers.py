@@ -47,6 +47,27 @@ class TransactionSerializer(serializers.ModelSerializer):
 
         return category
 
+    def validate(self, attrs):
+        category = attrs.get("category")
+
+        if category:
+            transaction_type = attrs.get(
+                "type",
+                getattr(self.instance, "type", None),
+            )
+
+            if transaction_type != category.type:
+                raise serializers.ValidationError(
+                    {
+                        "type": (
+                            "Typ transakcji musi być zgodny "
+                            "z typem kategorii."
+                        )
+                    }
+                )
+
+        return attrs
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,

@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 class Category(models.Model):
     class TransactionType(models.TextChoices):
         INCOME = "INCOME", "Wpływ"
-        EXPENSE = "EXPENSE" "Wydatek"
+        EXPENSE = "EXPENSE", "Wydatek"
 
     user = models.ForeignKey(
         User, 

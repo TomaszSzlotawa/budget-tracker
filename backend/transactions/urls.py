@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, TransactionViewSet, RegisterView
+from .views import CategoryViewSet, TransactionViewSet, RegisterView, FinancialSummaryView
 
 
 router = DefaultRouter()
@@ -13,5 +13,10 @@ urlpatterns = [
         "auth/register/",
         RegisterView.as_view(),
         name="register",
+    ),
+    path(
+        "summary/",
+        FinancialSummaryView.as_view(),
+        name="financial-summary",
     ),
 ]

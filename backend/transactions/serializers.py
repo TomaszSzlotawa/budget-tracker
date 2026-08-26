@@ -84,3 +84,17 @@ class RegisterSerializer(serializers.ModelSerializer):
             email=validated_data.get("email", ""),
             password=validated_data["password"],
         )
+
+class FinancialSummarySerializer(serializers.Serializer):
+    income = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    expenses = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+    balance = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )

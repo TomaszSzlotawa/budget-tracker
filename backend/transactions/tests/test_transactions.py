@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -207,3 +207,176 @@ class TransactionIsolationTests(APITestCase):
         )
 
         self.assertIn("type", response.data)
+
+class SummaryTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="summary_user",
+            password="testpassword123",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="other_summary_user",
+            password="testpassword123",
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        self.income_category = Category.objects.create(
+            user=self.user,
+            name="Wynagrodzenie",
+            type=Category.TransactionType.INCOME,
+        )
+
+        self.expense_category = Category.objects.create(
+            user=self.user,
+            name="Jedzenie",
+            type=Category.TransactionType.EXPENSE,
+        )
+
+        self.other_category = Category.objects.create(
+            user=self.other_user,
+            name="Inne",
+            type=Category.TransactionType.INCOME,
+        )
+
+    def create_transaction(
+        self,
+        category,
+        amount,
+        transaction_type,
+        transaction_date,
+        description="",
+        user=None,
+    ):
+        return Transaction.objects.create(
+            user=user or self.user,
+            category=category,
+            amount=Decimal(str(amount)),
+            type=transaction_type,
+            date=transaction_date,
+            description=description,
+        )
+
+    def test_summary_returns_correct_totals(self):
+        self.create_transaction(
+            self.income_category,
+            "5000.00",
+            Transaction.TransactionType.INCOME,
+            date(2026, 1, 10),
+        )
+
+        self.create_transaction(
+            self.expense_category,
+            "150.00",
+            Transaction.TransactionType.EXPENSE,
+            date(2026, 1, 11),
+        )
+
+        self.create_transaction(
+            self.expense_category,
+            "350.00",
+            Transaction.TransactionType.EXPENSE,
+            date(2026, 1, 12),
+        )
+
+        response = self.client.get(
+            "/api/summary/?date_from=2026-01-01&date_to=2026-01-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["income"], "5000.00")
+        self.assertEqual(response.data["expenses"], "500.00")
+        self.assertEqual(response.data["balance"], "4500.00")
+
+    def test_summary_filters_by_date(self):
+        self.create_transaction(
+            self.income_category,
+            "5000.00",
+            Transaction.TransactionType.INCOME,
+            date(2026, 1, 10),
+        )
+
+        self.create_transaction(
+            self.expense_category,
+            "200.00",
+            Transaction.TransactionType.EXPENSE,
+            date(2026, 2, 10),
+        )
+
+        response = self.client.get(
+            "/api/summary/?date_from=2026-01-01&date_to=2026-01-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["income"], "5000.00")
+        self.assertEqual(response.data["expenses"], "0.00")
+        self.assertEqual(response.data["balance"], "5000.00")
+
+    def test_summary_uses_only_current_users_transactions(self):
+        self.create_transaction(
+            self.income_category,
+            "1000.00",
+            Transaction.TransactionType.INCOME,
+            date(2026, 1, 10),
+        )
+
+        self.create_transaction(
+            self.other_category,
+            "9999.00",
+            Transaction.TransactionType.INCOME,
+            date(2026, 1, 10),
+            user=self.other_user,
+        )
+
+        response = self.client.get(
+            "/api/summary/?date_from=2026-01-01&date_to=2026-01-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["income"], "1000.00")
+        self.assertEqual(response.data["expenses"], "0.00")
+        self.assertEqual(response.data["balance"], "1000.00")
+
+    def test_summary_returns_zero_when_there_are_no_transactions(self):
+        response = self.client.get(
+            "/api/summary/?date_from=2026-01-01&date_to=2026-01-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["income"], "0.00")
+        self.assertEqual(response.data["expenses"], "0.00")
+        self.assertEqual(response.data["balance"], "0.00")
+
+    def test_summary_rejects_invalid_date_from(self):
+        response = self.client.get(
+            "/api/summary/?date_from=abc"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "Nieprawidłowy format date_from. Użyj YYYY-MM-DD.",
+        )
+
+    def test_summary_rejects_invalid_date_to(self):
+        response = self.client.get(
+            "/api/summary/?date_to=abc"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "Nieprawidłowy format date_to. Użyj YYYY-MM-DD.",
+        )
+
+    def test_summary_rejects_invalid_date_range(self):
+        response = self.client.get(
+            "/api/summary/?date_from=2026-02-01&date_to=2026-01-01"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "date_from nie może być późniejsze niż date_to.",
+        )

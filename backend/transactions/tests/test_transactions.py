@@ -380,3 +380,297 @@ class SummaryTests(APITestCase):
             response.data["detail"],
             "date_from nie może być późniejsze niż date_to.",
         )
+
+class TransactionFilterTests(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="tomasz",
+            password="qwerty1234",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="jan",
+            password="qwerty1234",
+        )
+
+        self.expense_category = Category.objects.create(
+            user=self.user,
+            name="Jedzenie",
+            type=Category.TransactionType.EXPENSE,
+        )
+
+        self.income_category = Category.objects.create(
+            user=self.user,
+            name="Pensja",
+            type=Category.TransactionType.INCOME,
+        )
+
+        self.other_category = Category.objects.create(
+            user=self.other_user,
+            name="Transport",
+            type=Category.TransactionType.EXPENSE,
+        )
+
+        self.expense_transaction = Transaction.objects.create(
+            user=self.user,
+            category=self.expense_category,
+            amount=Decimal("50.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 25),
+            description="Obiad",
+        )
+
+        self.income_transaction = Transaction.objects.create(
+            user=self.user,
+            category=self.income_category,
+            amount=Decimal("3000.00"),
+            type=Transaction.TransactionType.INCOME,
+            date=date(2026, 8, 25),
+            description="Pensja",
+        )
+
+        self.other_transaction = Transaction.objects.create(
+            user=self.other_user,
+            category=self.other_category,
+            amount=Decimal("100.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 25),
+            description="Paliwo",
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+    def test_filter_transactions_by_type(self):
+        response = self.client.get(
+            "/api/transactions/?type=EXPENSE"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertIn(
+            self.expense_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertNotIn(
+            self.income_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertNotIn(
+            self.other_transaction.id,
+            transaction_ids,
+        )
+
+    def test_filter_transactions_by_income_type(self):
+        response = self.client.get(
+            "/api/transactions/?type=INCOME"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertIn(
+            self.income_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertNotIn(
+            self.expense_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertNotIn(
+            self.other_transaction.id,
+            transaction_ids,
+        )
+
+    def test_filter_transactions_by_category(self):
+        response = self.client.get(
+            f"/api/transactions/?category={self.expense_category.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertIn(
+            self.expense_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertNotIn(
+            self.income_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertNotIn(
+            self.other_transaction.id,
+            transaction_ids,
+        )
+
+    def test_combine_type_and_category_filters(self):
+        response = self.client.get(
+            f"/api/transactions/?type=EXPENSE&category={self.expense_category.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertEqual(
+            transaction_ids,
+            [self.expense_transaction.id],
+        )
+    def test_filter_transactions_by_date_from(self):
+        Transaction.objects.create(
+            user=self.user,
+            category=self.expense_category,
+            amount=Decimal("20.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 20),
+            description="Starsza",
+        )
+
+        response = self.client.get(
+            "/api/transactions/?date_from=2026-08-25"
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertIn(
+            self.expense_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertIn(
+            self.income_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertEqual(len(transaction_ids), 2)
+
+    def test_filter_transactions_by_date_to(self):
+        Transaction.objects.create(
+            user=self.user,
+            category=self.expense_category,
+            amount=Decimal("20.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 30),
+            description="Nowsza",
+        )
+
+        response = self.client.get(
+            "/api/transactions/?date_to=2026-08-25"
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertIn(
+            self.expense_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertIn(
+            self.income_transaction.id,
+            transaction_ids,
+        )
+
+        self.assertEqual(len(transaction_ids), 2)
+
+    def test_filter_transactions_by_date_range(self):
+        Transaction.objects.create(
+            user=self.user,
+            category=self.expense_category,
+            amount=Decimal("20.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 15),
+            description="Za wcześnie",
+        )
+
+        Transaction.objects.create(
+            user=self.user,
+            category=self.expense_category,
+            amount=Decimal("30.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 28),
+            description="Za późno",
+        )
+
+        response = self.client.get(
+            "/api/transactions/?date_from=2026-08-20&date_to=2026-08-26"
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertEqual(
+            sorted(transaction_ids),
+            sorted([
+                self.expense_transaction.id,
+                self.income_transaction.id,
+            ]),
+        )
+
+    def test_combine_all_filters(self):
+        Transaction.objects.create(
+            user=self.user,
+            category=self.expense_category,
+            amount=Decimal("40.00"),
+            type=Transaction.TransactionType.EXPENSE,
+            date=date(2026, 8, 15),
+            description="Inna",
+        )
+
+        response = self.client.get(
+            f"/api/transactions/?type=EXPENSE"
+            f"&category={self.expense_category.id}"
+            f"&date_from=2026-08-20"
+            f"&date_to=2026-08-30"
+        )
+
+        transaction_ids = [
+            transaction["id"]
+            for transaction in response.data
+        ]
+
+        self.assertEqual(
+            transaction_ids,
+            [self.expense_transaction.id],
+        )

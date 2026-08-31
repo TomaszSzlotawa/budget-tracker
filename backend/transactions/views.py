@@ -9,6 +9,9 @@ from .models import Category, Transaction
 from .serializers import CategorySerializer, TransactionSerializer, RegisterSerializer, FinancialSummarySerializer
 from .services import get_financial_summary
 
+from django_filters.rest_framework import DjangoFilterBackend
+from .filters import TransactionFilter
+
 
 class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
@@ -21,11 +24,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = TransactionFilter
 
     def get_queryset(self):
-        return Transaction.objects.filter(
-            user=self.request.user
-        ).select_related("category")
+        return (
+            Transaction.objects.filter(user=self.request.user)
+            .select_related("category")
+        )
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
